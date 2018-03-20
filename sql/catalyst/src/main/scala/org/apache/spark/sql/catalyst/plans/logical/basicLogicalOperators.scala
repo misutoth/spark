@@ -404,6 +404,7 @@ object AppendData {
  */
 case class InsertIntoTable(
     table: LogicalPlan,
+    columns: Option[Seq[Expression]],
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,

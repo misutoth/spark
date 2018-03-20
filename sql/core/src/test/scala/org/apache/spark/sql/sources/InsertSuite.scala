@@ -589,4 +589,25 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       sql("INSERT INTO TABLE test_table SELECT 2, null")
     }
   }
+
+  test("INSERT INTO using column names") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable (b,a) SELECT b, a FROM jt
+    """.stripMargin).explain()
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
 }

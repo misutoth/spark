@@ -25,7 +25,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
@@ -56,7 +56,8 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
-    outputColumns: Seq[Attribute])
+    outputColumns: Seq[Attribute],
+    columns: Option[Seq[Expression]] = None)
   extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
