@@ -590,7 +590,47 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
-  test("INSERT INTO using column names") {
+  test("INSERT INTO using without column names") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin).explain()
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO using column names matching order") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable (a, b) SELECT a, b FROM jt
+    """.stripMargin).explain()
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO using column names in reverse order") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
