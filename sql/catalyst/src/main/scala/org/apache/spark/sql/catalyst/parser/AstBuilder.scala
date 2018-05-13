@@ -182,7 +182,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Parameters used for writing query to a table:
    *   (tableIdentifier, partitionKeys, exists).
    */
-  type InsertTableParams = (TableIdentifier, Option[Seq[Expression]], Map[String, Option[String]],
+  type InsertTableParams = (TableIdentifier, Option[Seq[String]], Map[String, Option[String]],
     Boolean)
 
   /**
@@ -206,7 +206,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ctx match {
       case table: InsertIntoTableContext =>
         val (tableIdent, namedSeq, partitionKeys, exists) = visitInsertIntoTable(table)
-        InsertIntoTable(UnresolvedRelation(tableIdent), namedSeq, partitionKeys, query,
+        val columns = namedSeq.map(_.map(name => UnresolvedAttribute(name)))
+        InsertIntoTable(UnresolvedRelation(tableIdent), columns, partitionKeys, query,
           false, exists)
       case table: InsertOverwriteTableContext =>
         val (tableIdent, _, partitionKeys, exists) = visitInsertOverwriteTable(table)
@@ -229,9 +230,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
-    val namedSeq = Option(ctx.namedExpressionSeq).map(visitNamedExpressionSeq)
+    val colList = Option(ctx.identifierList).map(visitIdentifierList)
 
-    (tableIdent, namedSeq, partitionKeys, false)
+    (tableIdent, colList, partitionKeys, false)
   }
 
   /**

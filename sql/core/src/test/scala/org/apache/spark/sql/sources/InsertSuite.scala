@@ -603,7 +603,38 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     sql(
       s"""
          |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
-    """.stripMargin).explain()
+    """.stripMargin).explain(true)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+    )
+  }
+
+  test("INSERT INTO colnames matching order strings only") {
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW jsonTable (a string, b string)
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '${path.toURI.toString}'
+         |)
+      """.stripMargin)
+    val ds = (1 to 10).map(i => s"""{"a":"strA$i", "b":"strB$i"}""").toDS()
+    spark.read.json(ds).createOrReplaceTempView("jt")
+
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    sql(
+      s"""
+         |INSERT INTO TABLE jsonTable (a, b) SELECT a, b FROM jt
+    """.stripMargin).explain(true)
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
