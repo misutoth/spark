@@ -336,7 +336,14 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       insert.partition, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
-    val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    if (insert.columns.exists(_.length != insert.table.output.length)) {
+      throw new AnalysisException(
+        s"Specified number of columns is ${insert.columns.get.length} that must be equal to the " +
+          s"number of columns of table $tblName which is ${insert.table.output.length}")
+    }
+
+    val allExpectedColumns = insert.columns.getOrElse(insert.table.output)
+    val expectedColumns = allExpectedColumns.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
@@ -346,10 +353,9 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-//    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-//      insert.query, expectedColumns, conf)
     val currentOutput = insert.query.output
-    val newChildOutput = mapToExpectedTypes(currentOutput, expectedColumns, conf)
+    val mapping = DDLPreprocessingUtils.expectedTypeMapping(currentOutput, expectedColumns, conf)
+    val newChildOutput = currentOutput.map( mapping.getOrElse(_, throw new RuntimeException))
     val newQuery = if (newChildOutput == insert.query.output) {
       insert.query
     } else {
@@ -358,17 +364,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     val newCols =
       if (insert.columns.isDefined) {
-        Some(DDLPreprocessingUtils
-          .mapToExpectedTypes(insert.columns.get, expectedColumns, conf)
+        Some(insert.columns.get.map( mapping.getOrElse(_, throw new RuntimeException))
           .map(_.toAttribute))
       } else {
         None
       }
-//    val newCols = insert.columns.map {
-//      current => DDLPreprocessingUtils
-//        .mapToExpectedTypes(current, expectedColumns, conf)
-//          .map(_.toAttribute)
-//    }
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(

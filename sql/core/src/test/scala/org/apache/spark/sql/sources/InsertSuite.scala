@@ -681,6 +681,25 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
+  test("INSERT INTO having less columns") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
+    """.stripMargin)
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect()
+    )
+
+    val message = intercept[AnalysisException] {
+      sql("INSERT INTO TABLE jsonTable (b) SELECT b, a FROM jt")
+    }.getMessage
+    // Mismatch should describe that the specified number of columns is 1
+    // as opposed to the total of 2
+    assert(message.contains("1"))
+    assert(message.contains("2"))
+  }
+
   test("INSERT INTO using column names with values") {
     sql(
       s"""
@@ -693,11 +712,11 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     sql(
       s"""
-         |INSERT INTO TABLE jsonTable VALUES (33, str33)
+         |INSERT INTO TABLE jsonTable VALUES (33, 'str33')
     """.stripMargin).explain()
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
+      sql("SELECT a, b FROM jt").union(Seq((33, "str33")).toDF)
     )
   }
 
