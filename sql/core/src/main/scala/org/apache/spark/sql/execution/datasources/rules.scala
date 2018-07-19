@@ -364,8 +364,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     val newCols =
       if (insert.columns.isDefined) {
-        Some(insert.columns.get.map( mapping.getOrElse(_, throw new RuntimeException))
-          .map(_.toAttribute))
+        // val newTable = insert.table.asInstanceOf[LogicalRelation].copy(output = newOutput)
+        None
+        //Some(insert.columns.get
+        //  .map(mapping.getOrElse(_, throw new RuntimeException))
+        //  .map(_.toAttribute))
       } else {
         None
       }

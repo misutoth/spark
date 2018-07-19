@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -945,7 +944,18 @@ class Analyzer(
         } else {
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
+      case i @ InsertIntoTable(table, Some(columns: Seq[Attribute]), _,
+        _, _, _) if table.resolved && columns.exists(_.isInstanceOf[UnresolvedAttribute]) =>
+        logTrace(s"Attempting to resolve columns in ${i.simpleString}")
+        // i.copy(columns = Some(columns.map(resolve(_, table).asInstanceOf[Attribute])))
+        val tableColumns = AttributeSeq(table.output)
+        val mappedColumns = columns.filter(_.isInstanceOf[UnresolvedAttribute]).map( col =>
+          tableColumns.resolve(col.asInstanceOf[UnresolvedAttribute].nameParts, resolver)
+            .map(_.toAttribute).getOrElse(col)
+        )
 
+        i.copy(columns = Some(mappedColumns))
+        // .resolve(_)
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
