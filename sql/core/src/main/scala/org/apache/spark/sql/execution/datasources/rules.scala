@@ -327,6 +327,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
  * inserted have the correct data type and fields have the correct names.
  */
 case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -335,8 +336,32 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       insert.partition, partColNames, tblName, conf.resolver)
 
+    val newQuery = matchQueryAttributesToTableColumns(insert, tblName, normalizedPartSpec)
+
+    if (normalizedPartSpec.nonEmpty) {
+      if (normalizedPartSpec.size != partColNames.length) {
+        throw new AnalysisException(
+          s"""
+             |Requested partitioning does not match the table $tblName:
+             |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
+             |Table partitions: ${partColNames.mkString(",")}
+           """.stripMargin)
+      }
+
+      insert.copy(query = newQuery, partition = normalizedPartSpec, columns = None)
+    } else {
+      // All partition columns are dynamic because the InsertIntoTable command does
+      // not explicitly specify partitioning columns.
+      insert.copy(query = newQuery,
+        partition = partColNames.map(_ -> None).toMap,
+        columns = None)
+    }
+  }
+
+  private def matchQueryAttributesToTableColumns(insert: InsertIntoTable, tblName: String, normalizedPartSpec: Map[String, Option[String]]): LogicalPlan = {
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
-    if (insert.columns.exists(_.length != insert.table.output.length)) {
+    logInfo(s"Static part: $staticPartCols")
+    if (insert.columns.exists(_.length != insert.table.output.length - insert.partition.size)) {
       throw new AnalysisException(
         s"Specified number of columns is ${insert.columns.get.length} that must be equal to the " +
           s"number of columns of table $tblName which is ${insert.table.output.length}")
@@ -355,41 +380,20 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     val currentOutput = insert.query.output
     val mapping = DDLPreprocessingUtils.expectedTypeMapping(currentOutput, expectedColumns, conf)
-    val newChildOutput = currentOutput.map( mapping.getOrElse(_, throw new RuntimeException))
-    val newQuery = if (newChildOutput == insert.query.output) {
+    val newChildOutput: Seq[NamedExpression] =
+      currentOutput.map(key => mapping.getOrElse(key,
+        throw new AnalysisException(s"Could not map property $key in current output to any " +
+          s"column in table $tblName. Possible values are: ${mapping.keys.mkString(",")}")))
+    val childMap = newChildOutput.map(v => (v.name, v)).toMap
+    // Output fields need to match table attribute ordering
+    // because subsequent operations rely on this
+    val ordered = insert.table.output.flatMap(tableCol => childMap.get(tableCol.name).toList)
+    val newQuery = if (ordered == insert.query.output) {
       insert.query
     } else {
-      Project(newChildOutput, insert.query)
+      Project(ordered, insert.query)
     }
-
-    val newCols =
-      if (insert.columns.isDefined) {
-        // val newTable = insert.table.asInstanceOf[LogicalRelation].copy(output = newOutput)
-        None
-        //Some(insert.columns.get
-        //  .map(mapping.getOrElse(_, throw new RuntimeException))
-        //  .map(_.toAttribute))
-      } else {
-        None
-      }
-    if (normalizedPartSpec.nonEmpty) {
-      if (normalizedPartSpec.size != partColNames.length) {
-        throw new AnalysisException(
-          s"""
-             |Requested partitioning does not match the table $tblName:
-             |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
-             |Table partitions: ${partColNames.mkString(",")}
-           """.stripMargin)
-      }
-
-      insert.copy(query = newQuery, partition = normalizedPartSpec, columns = newCols)
-    } else {
-      // All partition columns are dynamic because the InsertIntoTable command does
-      // not explicitly specify partitioning columns.
-      insert.copy(query = newQuery,
-        partition = partColNames.map(_ -> None).toMap,
-        columns = newCols)
-    }
+    newQuery
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {

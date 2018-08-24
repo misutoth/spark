@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -703,7 +704,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoTable(u: UnresolvedRelation, cols, parts, child, _, _) if child.resolved =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, parts, child, _, _) if child.resolved =>
         EliminateSubqueryAliases(lookupTableFromCatalog(u)) match {
           case v: View =>
             u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
@@ -949,10 +950,11 @@ class Analyzer(
         logTrace(s"Attempting to resolve columns in ${i.simpleString}")
         // i.copy(columns = Some(columns.map(resolve(_, table).asInstanceOf[Attribute])))
         val tableColumns = AttributeSeq(table.output)
-        val mappedColumns = columns.filter(_.isInstanceOf[UnresolvedAttribute]).map( col =>
-          tableColumns.resolve(col.asInstanceOf[UnresolvedAttribute].nameParts, resolver)
-            .map(_.toAttribute).getOrElse(col)
-        )
+        val mappedColumns = columns.filter(_.isInstanceOf[UnresolvedAttribute]).map {
+          case col @ (u: UnresolvedAttribute) =>
+            tableColumns.resolve(u.nameParts, resolver).map(_.toAttribute).getOrElse(col)
+          case other => other
+        }
 
         i.copy(columns = Some(mappedColumns))
         // .resolve(_)
