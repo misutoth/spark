@@ -358,7 +358,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
   }
 
-  private def matchQueryAttributesToTableColumns(insert: InsertIntoTable, tblName: String, normalizedPartSpec: Map[String, Option[String]]): LogicalPlan = {
+  private def matchQueryAttributesToTableColumns(
+      insert: InsertIntoTable,
+      tblName: String,
+      normalizedPartSpec: Map[String,
+      Option[String]]): LogicalPlan = {
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     logInfo(s"Static part: $staticPartCols")
     if (insert.columns.exists(_.length != insert.table.output.length - insert.partition.size)) {
