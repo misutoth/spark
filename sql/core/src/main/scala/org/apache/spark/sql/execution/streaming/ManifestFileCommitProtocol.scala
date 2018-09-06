@@ -84,7 +84,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
     val uuid = UUID.randomUUID.toString
-    val filename = f"part-$split%05d-$uuid$ext"
+    val partitionId = taskContext.getConfiguration.getInt("mapreduce.task.partition", -1)
+    val filename = f"part-$batchId-$partitionId%05d-$ext"
 
     val file = dir.map { d =>
       new Path(new Path(path, d), filename).toString

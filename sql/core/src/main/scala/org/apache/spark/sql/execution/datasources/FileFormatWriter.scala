@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Date, UUID}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{SQLExecution, SortExec, SparkPlan}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -218,14 +217,15 @@ object FileFormatWriter extends Logging {
       hadoopConf.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
       hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
       hadoopConf.setBoolean("mapreduce.task.ismap", true)
-      hadoopConf.setInt("mapreduce.task.partition", 0)
+      hadoopConf.setInt("mapreduce.task.partition", sparkPartitionId)
 
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
 
     committer.setupTask(taskAttemptContext)
 
-    val dataWriter =
+
+    val dataWriter: FileFormatDataWriter = try {
       if (sparkPartitionId != 0 && !iterator.hasNext) {
         // In case of empty job, leave first partition to save meta for file format like parquet.
         new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
@@ -234,6 +234,16 @@ object FileFormatWriter extends Logging {
       } else {
         new DynamicPartitionDataWriter(description, taskAttemptContext, committer)
       }
+    } catch {
+      case e: FileAlreadyExistsException =>
+        logWarning(s"Output data file has already been generated " +
+          s"skipping actual writing ${e.getMessage}")
+        new FileFormatDataWriter(description, taskAttemptContext, committer) {
+          override def write(record: InternalRow): Unit = {}
+        }
+      case d => throw d
+
+    }
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
