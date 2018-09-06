@@ -242,8 +242,6 @@ object FileFormatWriter extends Logging {
         new FileFormatDataWriter(description, taskAttemptContext, committer) {
           override def write(record: InternalRow): Unit = {}
         }
-      case d => throw d
-
     }
 
     try {
