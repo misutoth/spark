@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Date, UUID}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -218,15 +218,14 @@ object FileFormatWriter extends Logging {
       hadoopConf.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
       hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
       hadoopConf.setBoolean("mapreduce.task.ismap", true)
-      hadoopConf.setInt("mapreduce.task.partition", sparkPartitionId)
+      hadoopConf.setInt("mapreduce.task.partition", 0)
 
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
 
     committer.setupTask(taskAttemptContext)
 
-
-    val dataWriter: FileFormatDataWriter = try {
+    val dataWriter =
       if (sparkPartitionId != 0 && !iterator.hasNext) {
         // In case of empty job, leave first partition to save meta for file format like parquet.
         new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
@@ -235,14 +234,6 @@ object FileFormatWriter extends Logging {
       } else {
         new DynamicPartitionDataWriter(description, taskAttemptContext, committer)
       }
-    } catch {
-      case e: FileAlreadyExistsException =>
-        logWarning(s"Output data file has already been generated " +
-          s"skipping actual writing ${e.getMessage}")
-        new FileFormatDataWriter(description, taskAttemptContext, committer) {
-          override def write(record: InternalRow): Unit = {}
-        }
-    }
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
