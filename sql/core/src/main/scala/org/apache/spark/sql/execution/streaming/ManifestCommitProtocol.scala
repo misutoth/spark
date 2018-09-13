@@ -21,9 +21,9 @@ trait ManifestCommitProtocol {
   @transient protected var fileLog: MetadataLog[Array[SinkFileStatus]] = _
   protected var batchId: Long = _
   /**
-    * Sets up the manifest log output and the batch id for this job.
-    * Must be called before any other function.
-    */
+   * Sets up the manifest log output and the batch id for this job.
+   * Must be called before any other function.
+   */
   def setupManifestOptions(fileLog: MetadataLog[Array[SinkFileStatus]], batchId: Long): Unit = {
     this.fileLog = fileLog
     this.batchId = batchId

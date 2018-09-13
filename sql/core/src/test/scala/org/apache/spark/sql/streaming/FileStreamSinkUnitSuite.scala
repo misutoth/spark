@@ -19,14 +19,14 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, FilenameFilter}
 
-import scala.io.Source
 import com.google.common.io.PatternFilenameFilter
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.mapreduce.JobContext
 import org.scalatest.BeforeAndAfter
+import scala.io.Source
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
-import org.apache.spark.internal.io.HadoopMapRedCommitProtocol
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, ManifestFileCommitProtocol, StagingFileCommitProtocol}

@@ -21,13 +21,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.internal.io.FileCommitProtocol.EmptyTaskCommitMessage
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.test.TestSparkSession
-import org.mockito.Mockito.when
 import org.mockito.{Matchers, Mockito}
+import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.io.FileCommitProtocol.EmptyTaskCommitMessage
+import org.apache.spark.sql.test.TestSparkSession
 
 class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
   val array: Array[Byte] = new Array[Byte](1000)
