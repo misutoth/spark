@@ -24,7 +24,8 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 
 class StagingFileCommitProtocol(jobId: String, path: String)
-  extends FileCommitProtocol with Serializable with Logging{
+  extends FileCommitProtocol with Serializable with Logging
+  with ManifestCommitProtocol {
   private var stagingDir: Option[Path] = None
 
 
@@ -68,13 +69,20 @@ class StagingFileCommitProtocol(jobId: String, path: String)
       }
     }
 
+    val statuses = Array.newBuilder[SinkFileStatus]
     while (files.hasNext) {
       val next = files.next().getPath
       val target = new Path(path, next.getName)
       moveIfPossible(next, target)
+      statuses += SinkFileStatus(fs.getFileStatus(target))
     }
-    logInfo(s"Job $jobId committed")
-    Seq()
+    if (fileLog.add(batchId, statuses.result)) {
+      logInfo(s"Job $jobId committed")
+    } else {
+      throw new IllegalStateException(s"Race while writing batch $batchId")
+    }
+
+  Seq()
   }
 
   override def abortJob(jobContext: JobContext): Unit = {}

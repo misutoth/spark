@@ -21,8 +21,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.internal.io.FileCommitProtocol.EmptyTaskCommitMessage
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.test.TestSparkSession
+import org.mockito.Mockito.when
+import org.mockito.{Matchers, Mockito}
 import org.scalatest.BeforeAndAfter
 
 class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
@@ -35,11 +39,25 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
   val taskAttemptId: TaskAttemptID = new TaskAttemptID("SPARK", jobID, true, taskId, attemptId)
   val taskAttemptId2: TaskAttemptID = new TaskAttemptID("SPARK", jobID, true, taskId2, attemptId)
   val basePath = "somepath"
-  val protocol = new StagingFileCommitProtocol(jobID.toString, basePath)
+  val protocol = newCommitProtocol(jobID)
   val hadoopConf = createConf(0, taskAttemptId)
   val tx = new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
   val fs = new Path(basePath).getFileSystem(hadoopConf)
   val ctx: JobContext = Job.getInstance(hadoopConf)
+
+  val session = new TestSparkSession()
+  def newCommitProtocol(batchId: Int): StagingFileCommitProtocol = {
+    val p = new StagingFileCommitProtocol(batchId.toString, basePath)
+    val logClass = classOf[MetadataLog[Array[SinkFileStatus]]]
+    val log: MetadataLog[Array[SinkFileStatus]] = Mockito.mock(logClass)
+    when(log.add(Matchers.anyInt, Matchers.any(classOf[Array[SinkFileStatus]])))
+        .thenReturn(true)
+
+    p.setupManifestOptions(
+      log,
+      batchId)
+    p
+  }
 
   def createConf(partition: Int, taskAttemptId: TaskAttemptID): Configuration = {
     val hc = new Configuration()
@@ -48,6 +66,7 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
     hc.set("mapreduce.task.attempt.id", taskAttemptId.toString)
     hc.setBoolean("mapreduce.task.ismap", true)
     hc.setInt("mapreduce.task.partition", partition)
+    session
     hc
   }
 
@@ -86,7 +105,7 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
     protocol.setupJob(ctx)
     protocol.setupTask(tx)
 
-    val protocol2 = new StagingFileCommitProtocol(jobID.toString, basePath)
+    val protocol2 = newCommitProtocol(jobID)
     val tx2 = new TaskAttemptContextImpl(createConf(1, taskAttemptId2), taskAttemptId2)
     protocol2.setupTask(tx2)
 
@@ -114,7 +133,7 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
 
     protocol.commitJob(ctx, Seq())
 
-    val protocol2 = new StagingFileCommitProtocol(jobID.toString, basePath)
+    val protocol2 = newCommitProtocol(jobID)
     val attempt = new TaskAttemptID("SPARK", jobID, true, taskId, attemptIdNext)
     hadoopConf.set("mapreduce.task.attempt.id", attempt.toString)
     val tx2 = new TaskAttemptContextImpl(hadoopConf, attempt)
@@ -139,7 +158,7 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
 
     protocol.onTaskCommit(EmptyTaskCommitMessage)
 
-    val protocol2 = new StagingFileCommitProtocol(jobID.toString, basePath)
+    val protocol2 = newCommitProtocol(jobID)
     val attempt = new TaskAttemptID("SPARK", jobID, true, taskId, attemptIdNext)
     hadoopConf.set("mapreduce.task.attempt.id", attempt.toString)
     val tx2 = new TaskAttemptContextImpl(hadoopConf, attempt)
