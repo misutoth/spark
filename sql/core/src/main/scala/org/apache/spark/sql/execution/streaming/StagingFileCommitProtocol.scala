@@ -55,7 +55,6 @@ class StagingFileCommitProtocol(jobId: String, path: String)
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     val fs = jobStagingDir.getFileSystem(jobContext.getConfiguration)
     val fileCtx = FileContext.getFileContext
-    val files = fs.listFiles(jobStagingDir, true)
 
     def moveIfPossible(next: Path, target: Path) = {
       try {
@@ -70,20 +69,33 @@ class StagingFileCommitProtocol(jobId: String, path: String)
       }
     }
 
-    val statuses = Array.newBuilder[SinkFileStatus]
-    while (files.hasNext) {
-      val next = files.next().getPath
-      val target = new Path(path, next.getName)
-      moveIfPossible(next, target)
-      statuses += SinkFileStatus(fs.getFileStatus(target))
-    }
-    if (fileLog.add(batchId, statuses.result)) {
-      logInfo(s"Job $jobId committed")
-    } else {
-      throw new IllegalStateException(s"Race while writing batch $batchId")
+    def moveEach(from: Path, to: String) = {
+      val files = fs.listFiles(from, true)
+      val statuses = Array.newBuilder[SinkFileStatus]
+      while (files.hasNext) {
+        val next = files.next().getPath
+        val target = if (next.getParent.getName.startsWith(outputPartitionPrefix)) {
+          val subdir = next.getParent.getName.substring(outputPartitionPrefix.length)
+              .replaceAll(subdirEscapeSequence, "/")
+          val outputPartition = new Path(to, subdir)
+          fs.mkdirs(outputPartition)
+          new Path(outputPartition, next.getName)
+        } else {
+          new Path(to, next.getName)
+        }
+        moveIfPossible(next, target)
+        statuses += SinkFileStatus(fs.getFileStatus(target))
+      }
+      if (fileLog.add(batchId, statuses.result)) {
+        logInfo(s"Job $jobId committed")
+      } else {
+        throw new IllegalStateException(s"Race while writing batch $batchId")
+      }
     }
 
-  Seq()
+    moveEach(jobStagingDir, path)
+
+    Seq()
   }
 
   override def abortJob(jobContext: JobContext): Unit = {}
@@ -96,13 +108,23 @@ class StagingFileCommitProtocol(jobId: String, path: String)
     fileCounter
   }
 
+  private val outputPartitionPrefix = "part_prefix_"
+
+  private val subdirEscapeSequence = "___per___"
+
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    val targetDir = dir.map(d => new Path(stagingDir.get, d)).getOrElse(stagingDir.get)
+    val targetDir =
+      dir.map(d => new Path(stagingDir.get, stagingReplacementDir(d)))
+        .getOrElse(stagingDir.get)
     val res =
       new Path(targetDir, s"part-j$jobId-p${partition(taskContext)}-c$nextCounter$ext").toString
     logInfo(s"New file generated $res")
     res
+  }
+
+  private def stagingReplacementDir(d: String) = {
+    outputPartitionPrefix + d.replaceAll("/", subdirEscapeSequence)
   }
 
   override def newTaskTempFileAbsPath(

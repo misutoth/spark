@@ -88,6 +88,20 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
     assert(fileContents == Set("data"))
   }
 
+  test("file is generated into partition subdirectory") {
+    protocol.setupJob(ctx)
+
+    protocol.setupTask(tx)
+    val fileName = protocol.newTaskTempFile(tx, Some("subdir"), "ext")
+    writeToFile(fileName, "data")
+
+    protocol.onTaskCommit(EmptyTaskCommitMessage)
+
+    protocol.commitJob(ctx, Seq(EmptyTaskCommitMessage))
+
+    assert(fileContents(new Path(basePath, "subdir")) == Set("data"))
+  }
+
   test("before job commit file is not visible") {
     protocol.setupJob(ctx)
 
@@ -196,6 +210,10 @@ class StagingFileCommitProtocolSuite extends SparkFunSuite with BeforeAndAfter {
 
   private def fileContents: Set[String] = {
     val path = new Path(basePath)
+    fileContents(path)
+  }
+
+  private def fileContents(path: Path): Set[String] = {
     val files: RemoteIterator[LocatedFileStatus] = fs.listFiles(path, false)
 
     val fileList = Seq.newBuilder[LocatedFileStatus]
