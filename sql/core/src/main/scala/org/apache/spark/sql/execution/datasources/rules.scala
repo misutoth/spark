@@ -371,7 +371,24 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"number of columns of table $tblName which is ${insert.table.output.length}")
     }
 
-    val allExpectedColumns = insert.columns.getOrElse(insert.table.output)
+    val allExpectedColumns = if (insert.columns.isDefined) {
+      val b = Seq.newBuilder[Attribute]
+      val ci = insert.columns.get.iterator
+      val out = insert.table.output.toArray
+      for(i <- insert.table.output.indices) {
+        if (insert.columns.get.contains(out(i))) {
+          b += ci.next()
+        } else {
+          b += out(i)
+        }
+
+      }
+      b.result()
+    } else {
+      insert.table.output
+    }
+
+    // val allExpectedColumns = insert.columns.getOrElse(insert.table.output)
     val expectedColumns = allExpectedColumns.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {

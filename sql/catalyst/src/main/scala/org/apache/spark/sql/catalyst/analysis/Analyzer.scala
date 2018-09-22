@@ -878,9 +878,15 @@ class Analyzer(
       }
     }
 
-    private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
-      case f: LambdaFunction if !f.bound => f
-      case u @ UnresolvedAttribute(nameParts) =>
+    private def resolve(e: Expression, q: LogicalPlan): Expression = (e, q) match {
+      case (f: LambdaFunction, _) if !f.bound => f
+      case (u @ UnresolvedAttribute(nameParts), i: InsertIntoTable) =>
+        if (i.columns.getOrElse(Seq()).contains(u)) {
+          resolve(u, i.table)
+        } else {
+          resolve(u, i.query)
+        }
+      case (u @ UnresolvedAttribute(nameParts), _) =>
         // Leave unchanged if resolution fails. Hopefully will be resolved next round.
         val result =
           withPosition(u) {
@@ -890,9 +896,10 @@ class Analyzer(
           }
         logDebug(s"Resolving $u to $result")
         result
-      case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+      case (UnresolvedExtractValue(child, fieldExpr), _) if child.resolved =>
         ExtractValue(child, fieldExpr, resolver)
-      case _ => e.mapChildren(resolve(_, q))
+      case (_, _) =>
+        e.mapChildren(resolve(_, q))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
