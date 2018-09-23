@@ -149,7 +149,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
     case InsertIntoTable(r: HiveTableRelation, cols, partSpec, query, overwrite,
       ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
-      InsertIntoHiveTable(r.tableMeta, cols, partSpec, query, overwrite,
+      InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>

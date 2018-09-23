@@ -590,27 +590,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
-  test("INSERT INTO using without column names") {
-    sql(
-      s"""
-         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
-    """.stripMargin)
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt").collect()
-    )
-
-    sql(
-      s"""
-         |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
-    """.stripMargin).explain(true)
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt UNION ALL SELECT a, b FROM jt").collect()
-    )
-  }
-
-  test("INSERT INTO colnames matching order strings only") {
+  test("SPARK-20845: INSERT INTO column names matching order - strings only") {
     sql(
       s"""
          |CREATE OR REPLACE TEMPORARY VIEW jsonTable (a string, b string)
@@ -641,7 +621,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("INSERT INTO using column names matching order") {
+  test("SPARK-20845: INSERT INTO using column names matching order") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -661,7 +641,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("INSERT INTO using column names in reverse order") {
+  test("SPARK-20845: INSERT INTO using column names in reverse order") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -681,7 +661,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("INSERT INTO using column names in reverse order in place values") {
+  test("SPARK-20845: INSERT INTO using column names in reverse order in place values") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -701,7 +681,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("INSERT INTO table values") {
+  test("SPARK-20845: INSERT INTO table values") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -721,7 +701,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("INSERT INTO having less columns") {
+  test("SPARK-20845: INSERT INTO having less columns should result in analysis exception") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -740,7 +720,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     assert(message.contains("2"))
   }
 
-  test("INSERT INTO using column names with values") {
+  test("SPARK-20845: INSERT INTO using column names with values") {
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt

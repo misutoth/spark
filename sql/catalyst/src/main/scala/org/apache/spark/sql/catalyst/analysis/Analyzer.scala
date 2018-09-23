@@ -898,7 +898,7 @@ class Analyzer(
         result
       case (UnresolvedExtractValue(child, fieldExpr), _) if child.resolved =>
         ExtractValue(child, fieldExpr, resolver)
-      case (_, _) =>
+      case _ =>
         e.mapChildren(resolve(_, q))
     }
 
