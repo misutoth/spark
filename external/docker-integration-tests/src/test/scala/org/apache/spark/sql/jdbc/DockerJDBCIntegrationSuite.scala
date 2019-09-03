@@ -64,6 +64,10 @@ abstract class DatabaseOnDocker {
    * Optional process to run when container starts
    */
   def getStartupProcessName: Option[String]
+
+  def beforeContainerLaunch(containerConfigBuilder: ContainerConfig.Builder,
+                            hostConfigBuilder: HostConfig.Builder): Unit = {}
+
 }
 
 abstract class DockerJDBCIntegrationSuite
@@ -106,30 +110,30 @@ abstract class DockerJDBCIntegrationSuite
         port
       }
       val dockerIp = DockerUtils.getDockerIp()
-      val hostConfig: HostConfig = HostConfig.builder()
+      val hostConfigBuilder = HostConfig.builder()
         .networkMode("bridge")
         .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
           Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
-        .build()
       // Create the database container:
       val containerConfigBuilder = ContainerConfig.builder()
         .image(db.imageName)
         .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-        .hostConfig(hostConfig)
         .exposedPorts(s"${db.jdbcPort}/tcp")
       if(db.getStartupProcessName.isDefined) {
         containerConfigBuilder
         .cmd(db.getStartupProcessName.get)
       }
+      db.beforeContainerLaunch(containerConfigBuilder, hostConfigBuilder)
+      containerConfigBuilder.hostConfig(hostConfigBuilder.build())
       val config = containerConfigBuilder.build()
       // Create the database container:
       containerId = docker.createContainer(config).id
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
-      eventually(timeout(1.minute), interval(1.second)) {
+      eventually(timeout(20.seconds), interval(1.second)) {
         val conn = java.sql.DriverManager.getConnection(jdbcUrl)
         conn.close()
       }
